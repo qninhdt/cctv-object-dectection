@@ -1,0 +1,108 @@
+{
+    "os": "Linux-6.2.0-37-generic-x86_64-with-glibc2.37",
+    "python": "3.10.0",
+    "heartbeatAt": "2023-11-28T06:02:34.611384",
+    "startedAt": "2023-11-28T06:02:33.800066",
+    "docker": null,
+    "cuda": null,
+    "args": [],
+    "state": "running",
+    "program": "/home/qninhdt/code/yolo-v8-cctv/src/train.py",
+    "codePathLocal": "src/train.py",
+    "codePath": "src/train.py",
+    "git": {
+        "remote": null,
+        "commit": null
+    },
+    "email": "qndt123@gmail.com",
+    "root": "/home/qninhdt/code/yolo-v8-cctv",
+    "host": "qninhdt-pc",
+    "username": "qninhdt",
+    "executable": "/home/qninhdt/anaconda3/envs/yolo-v8-cctv/bin/python",
+    "cpu_count": 6,
+    "cpu_count_logical": 12,
+    "cpu_freq": {
+        "current": 3.479666666666667,
+        "min": 800.0,
+        "max": 4500.0
+    },
+    "cpu_freq_per_core": [
+        {
+            "current": 4.083,
+            "min": 800.0,
+            "max": 4500.0
+        },
+        {
+            "current": 4.097,
+            "min": 800.0,
+            "max": 4500.0
+        },
+        {
+            "current": 4.098,
+            "min": 800.0,
+            "max": 4500.0
+        },
+        {
+            "current": 4.099,
+            "min": 800.0,
+            "max": 4500.0
+        },
+        {
+            "current": 3.4,
+            "min": 800.0,
+            "max": 4500.0
+        },
+        {
+            "current": 4.074,
+            "min": 800.0,
+            "max": 4500.0
+        },
+        {
+            "current": 3.949,
+            "min": 800.0,
+            "max": 4500.0
+        },
+        {
+            "current": 4.097,
+            "min": 800.0,
+            "max": 4500.0
+        },
+        {
+            "current": 4.093,
+            "min": 800.0,
+            "max": 4500.0
+        },
+        {
+            "current": 4.099,
+            "min": 800.0,
+            "max": 4500.0
+        },
+        {
+            "current": 3.689,
+            "min": 800.0,
+            "max": 4500.0
+        },
+        {
+            "current": 2.7,
+            "min": 800.0,
+            "max": 4500.0
+        }
+    ],
+    "disk": {
+        "/": {
+            "total": 428.03399658203125,
+            "used": 156.25911331176758
+        }
+    },
+    "gpu": "NVIDIA GeForce RTX 3050 Laptop GPU",
+    "gpu_count": 1,
+    "gpu_devices": [
+        {
+            "name": "NVIDIA GeForce RTX 3050 Laptop GPU",
+            "memory_total": 4294967296
+        }
+    ],
+    "memory": {
+        "total": 15.347129821777344
+    }
+}
