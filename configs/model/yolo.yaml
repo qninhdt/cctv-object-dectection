@@ -1,4 +1,4 @@
-_target_: src.models.yolo_module.YOLOModule
+_target_: models.yolo_module.YOLOModule
 
 optimizer:
   _target_: torch.optim.Adam
@@ -14,6 +14,6 @@ scheduler:
   patience: 10
 
 net:
-  _target_: src.models.yolo_wrapper.YOLOWrapper
+  _target_: models.yolo_wrapper.YOLOWrapper
 
 compile: false

@@ -1,0 +1,42 @@
+_target_: models.mnist_module.MNISTLitModule
+
+optimizer:
+  _target_: torch.optim.Adam
+  _partial_: true
+  lr: 0.00001
+  weight_decay: 0.0
+
+scheduler:
+  _target_: torch.optim.lr_scheduler.ReduceLROnPlateau
+  _partial_: true
+  mode: min
+  factor: 0.1
+  patience: 10
+
+net:
+  _target_: models.detr.DETR
+
+  num_classes:
+  num_queries:
+  aux_loss:
+  bbox_loss_coef:
+  giou_loss_coef:
+  eos_coef:
+  dec_layers:
+
+  backbone:
+    _target_: models.detr.backbone.build_backbone
+    hidden_dim: ${net.hidden_dim}
+    position_encoding_type: "sine"
+    pretrained:
+    masks: ${net.masks}
+    dilation:
+
+  matcher:
+    _target_: models.detr.matcher.build_matcher
+    cost_class:
+    cost_bbox:
+    cost_giou:
+
+# compile model for faster training with pytorch 2.0
+compile: false

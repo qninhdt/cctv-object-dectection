@@ -1,6 +1,0 @@
-_target_: src.data.cctv_datamodule.CCTVDataModule
-data_dir: ${paths.data_dir}
-batch_size: 32
-train_val_test_split: [1_000, 1_000, 10_000]
-num_workers: 8
-pin_memory: False

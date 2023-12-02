@@ -3,6 +3,11 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+wandb
+runs
+checkpoints
+datasets
+
 # C extensions
 *.so
 

@@ -514,10 +514,10 @@ Suggestions for improvements are always welcome!
 All PyTorch Lightning modules are dynamically instantiated from module paths specified in config. Example model config:
 
 ```yaml
-_target_: src.models.mnist_model.MNISTLitModule
+_target_: models.mnist_model.MNISTLitModule
 lr: 0.001
 net:
-  _target_: src.models.components.simple_dense_net.SimpleDenseNet
+  _target_: models.components.simple_dense_net.SimpleDenseNet
   input_size: 784
   lin1_size: 256
   lin2_size: 256
@@ -875,7 +875,7 @@ You can also pass a datamodule config parameter to your model through variable i
 
 ```yaml
 # ./configs/model/my_model.yaml
-_target_: src.models.my_module.MyLitModule
+_target_: models.my_module.MyLitModule
 lr: 0.01
 some_param: ${data.some_param}
 ```

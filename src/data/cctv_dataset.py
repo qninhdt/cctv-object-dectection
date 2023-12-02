@@ -4,60 +4,67 @@ from pathlib import Path
 import json
 
 import torch
-from torchvision.transforms.functional import to_tensor
-from PIL.Image import Image, open as open_image
+import numpy as np
+from torchvision.transforms import v2 as T
+from torchvision import tv_tensors
 from torch.utils.data import Dataset
-
+from PIL.Image import Image, open as open_image
 
 class CCTVDataset(Dataset):
-    def __init__(self, data_dir: str, transforms: Callable) -> None:
+
+    def __init__(self, data_dir: str) -> None:
         super().__init__()
 
         self.data_dir = Path(data_dir)
-        self.transforms = transforms
 
         self.annotations: List[dict] = json.load(
             open(self.data_dir / "annotations.json"))
 
         self.images: List[dict] = self.annotations['images']
 
-        print(f"Loaded {len(self.images)} images.")
+        self.categorys = self.annotations['categories']
 
-    def __getitem__(self, idx: int) -> Tuple[Image, dict]:
+    def __getitem__(self, idx: int) -> dict:
 
         # copy annotation of image
         target: dict = self.images[idx].copy()
 
         # load image
-        image: Image = open_image(self.data_dir / 'images' /
+        orig_image: Image = open_image(self.data_dir / 'images' /
                                   target['filename']).convert('RGB')
 
-        # convert to tensor
-        image: torch.Tensor = self.transforms(image)
+        w, h = orig_image.size
+        
+        orig_image = torch.tensor(np.array(orig_image, dtype=np.uint8)).permute(2, 0, 1)
+        image = orig_image.clone()
 
-        return image, target
+        boxes = [[bbox['x'], bbox['y'], bbox['width'],
+                  bbox['height']] for bbox in target['boxes']]
+        classes = [bbox['category_id'] for bbox in target['boxes']]
 
-        # w, h = image.size
+        boxes = tv_tensors.BoundingBoxes(boxes, format="XYWH", canvas_size=(h, w))
+        classes = torch.as_tensor(classes, dtype=torch.int64)
 
-        # boxes = [[bbox['x'], bbox['y'], bbox['x'] + bbox['width'],
-        #           bbox['y'] + bbox['height']] for bbox in target['boxes']]
-        # classes = [bbox['category_id'] for bbox in target['boxes']]
+        size = torch.tensor([int(h), int(w)])
+        image_id = torch.tensor([target['id']])
 
-        # boxes = torch.as_tensor(boxes, dtype=torch.float32)
-        # classes = torch.as_tensor(classes, dtype=torch.int64)
+        sample = {
+            'image': image,
+            'image_id': image_id,
+            'orig_image': orig_image,
+            'size': size,
+            'boxes': boxes,
+            'labels': classes,
+        }
 
-        # size = torch.tensor([int(h), int(w)])
-        # original_size = torch.as_tensor([int(h), int(w)])
-        # image_id = torch.tensor([target['id']])
-
-        # # clamp boxes to image
-        # boxes[:, 0].clamp_(min=0, max=w)
-        # boxes[:, 1].clamp_(min=0, max=h)
-        # boxes[:, 2].clamp_(min=0, max=w)
-        # boxes[:, 3].clamp_(min=0, max=h)
+        return sample
 
     def __len__(self) -> int:
         return len(self.annotations['images'])
 
     def num_classes(self) -> int:
         return len(self.annotations['categories'])
+    
+    def get_category(self, idx: int) -> str:
+        return self.categorys[idx - 1]
+
