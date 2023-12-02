@@ -1,9 +1,9 @@
-_target_: models.mnist_module.MNISTLitModule
+_target_: models.detr.DETRModule
 
 optimizer:
   _target_: torch.optim.Adam
   _partial_: true
-  lr: 0.00001
+  lr: 0.0001
   weight_decay: 0.0
 
 scheduler:
@@ -14,29 +14,37 @@ scheduler:
   patience: 10
 
 net:
-  _target_: models.detr.DETR
+  _target_: models.detr.build_detr
 
-  num_classes:
-  num_queries:
-  aux_loss:
-  bbox_loss_coef:
-  giou_loss_coef:
-  eos_coef:
-  dec_layers:
+  num_classes: 11
+  num_queries: 100
+  aux_loss: true
+  bbox_loss_coef: 1
+  giou_loss_coef: 2
+  eos_coef: 0.1
+
+  dec_layers: 6
+
+  transformer:
+    _target_: models.detr.build_transformer
+    hidden_dim: 256
+    dropout: 0.1
+    nhead: 8
+    dim_feedforward: 2048
+    enc_layers: 6
+    dec_layers: 6
+    pre_norm: false
 
   backbone:
-    _target_: models.detr.backbone.build_backbone
-    hidden_dim: ${net.hidden_dim}
+    _target_: models.detr.build_backbone
+    hidden_dim: 256
     position_encoding_type: "sine"
-    pretrained:
-    masks: ${net.masks}
-    dilation:
 
   matcher:
-    _target_: models.detr.matcher.build_matcher
-    cost_class:
-    cost_bbox:
-    cost_giou:
+    _target_: models.detr.build_matcher
+    cost_class: 1
+    cost_bbox: 5
+    cost_giou: 2
 
 # compile model for faster training with pytorch 2.0
 compile: false

@@ -11,7 +11,7 @@ from torch import nn
 from torchvision.models._utils import IntermediateLayerGetter
 from typing import Dict, List
 
-from util.misc import NestedTensor, is_main_process
+from .util.misc import NestedTensor, is_main_process
 
 from .position_encoding import build_position_encoding
 
@@ -32,15 +32,29 @@ class FrozenBatchNorm2d(torch.nn.Module):
         self.register_buffer("running_mean", torch.zeros(n))
         self.register_buffer("running_var", torch.ones(n))
 
-    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict,
-                              missing_keys, unexpected_keys, error_msgs):
-        num_batches_tracked_key = prefix + 'num_batches_tracked'
+    def _load_from_state_dict(
+        self,
+        state_dict,
+        prefix,
+        local_metadata,
+        strict,
+        missing_keys,
+        unexpected_keys,
+        error_msgs,
+    ):
+        num_batches_tracked_key = prefix + "num_batches_tracked"
         if num_batches_tracked_key in state_dict:
             del state_dict[num_batches_tracked_key]
 
         super(FrozenBatchNorm2d, self)._load_from_state_dict(
-            state_dict, prefix, local_metadata, strict,
-            missing_keys, unexpected_keys, error_msgs)
+            state_dict,
+            prefix,
+            local_metadata,
+            strict,
+            missing_keys,
+            unexpected_keys,
+            error_msgs,
+        )
 
     def forward(self, x):
         # move reshapes to the beginning
@@ -56,14 +70,12 @@ class FrozenBatchNorm2d(torch.nn.Module):
 
 
 class BackboneBase(nn.Module):
-
-    def __init__(self, backbone: nn.Module, train_backbone: bool, num_channels: int, return_interm_layers: bool):
+    def __init__(
+        self, backbone: nn.Module, num_channels: int
+    ):
         super().__init__()
-        if return_interm_layers:
-            return_layers = {"layer1": "0", "layer2": "1", "layer3": "2", "layer4": "3"}
-        else:
-            return_layers = {'layer4': "0"}
-        self.body = IntermediateLayerGetter(backbone, return_layers=return_layers)
+
+        self.body = IntermediateLayerGetter(backbone, return_layers={"layer4": "0"})
         self.num_channels = num_channels
 
     def forward(self, tensor_list: NestedTensor):
@@ -79,14 +91,11 @@ class BackboneBase(nn.Module):
 
 class Backbone(BackboneBase):
     """ResNet backbone with frozen BatchNorm."""
-    def __init__(self, name: str,
-                 return_interm_layers: bool,
-                 dilation: bool):
-        backbone = getattr(torchvision.models, name)(
-            replace_stride_with_dilation=[False, False, dilation],
-            pretrained=is_main_process(), norm_layer=FrozenBatchNorm2d)
-        num_channels = 512 if name in ('resnet18', 'resnet34') else 2048
-        super().__init__(backbone, num_channels, return_interm_layers)
+
+    def __init__(self):
+        backbone = torchvision.models.resnet50(weights='ResNet50_Weights.DEFAULT')
+        num_channels = 2048
+        super().__init__(backbone, num_channels)
 
 
 class Joiner(nn.Sequential):
@@ -105,10 +114,9 @@ class Joiner(nn.Sequential):
         return out, pos
 
 
-def build_backbone(hidden_dim, position_embedding_type, masks, pretrained, dilation):
-    position_embedding = build_position_encoding(hidden_dim, position_embedding_type)
-    return_interm_layers = masks > 0
-    backbone = Backbone(pretrained, return_interm_layers, dilation)
+def build_backbone(hidden_dim, position_encoding_type,):
+    position_embedding = build_position_encoding(hidden_dim, position_encoding_type)
+    backbone = Backbone()
     model = Joiner(backbone, position_embedding)
     model.num_channels = backbone.num_channels
     return model

@@ -4,7 +4,7 @@ from typing import Any, Dict, Optional, Tuple, List
 import torch
 from lightning import LightningDataModule
 from torch.utils.data import DataLoader, Dataset, random_split
-from torchvision import transforms as T
+from torchvision.transforms import v2 as T
 from utils.transform import SquarePad
 from utils.dataset import ApplyTransform
 
@@ -12,8 +12,8 @@ from .cctv_dataset import CCTVDataset
 
 IMAGE_SIZE = 720
 
-class CCTVDataModule(LightningDataModule):
 
+class CCTVDataModule(LightningDataModule):
     def __init__(
         self,
         data_dir: str,
@@ -35,27 +35,30 @@ class CCTVDataModule(LightningDataModule):
         super().__init__()
 
         self.save_hyperparameters(logger=False)
-        
+
         self.for_detr = for_detr
 
         # data transformations
-        normalize = T.Normalize(mean=[0.485, 0.456, 0.406],
-                                std=[0.229, 0.224, 0.225])
-        
-        self.train_transforms = T.Compose([     
-            SquarePad(),      
-            T.RandomHorizontalFlip(p=0.5),
-            T.RandomResizedCrop(IMAGE_SIZE, (0.2, 1), (1, 1), antialias=True),
-            T.ToDtype(torch.float32, scale=True),
-            normalize,
-        ])
+        normalize = T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 
-        self.transforms = T.Compose([
-            SquarePad(),
-            T.Resize(IMAGE_SIZE),
-            T.ToDtype(torch.float32, scale=True),
-            normalize,
-        ])
+        self.train_transforms = T.Compose(
+            [
+                SquarePad(),
+                T.RandomHorizontalFlip(p=0.5),
+                T.RandomResizedCrop(IMAGE_SIZE, (0.2, 1), (1, 1), antialias=True),
+                T.ToDtype(torch.float32, scale=True),
+                normalize,
+            ]
+        )
+
+        self.transforms = T.Compose(
+            [
+                SquarePad(),
+                T.Resize(IMAGE_SIZE, antialias=True),
+                T.ToDtype(torch.float32, scale=True),
+                normalize,
+            ]
+        )
 
         self.dataset: Optional[CCTVDataset] = None
         self.data_train: Optional[Dataset] = None
@@ -82,13 +85,14 @@ class CCTVDataModule(LightningDataModule):
                 raise RuntimeError(
                     f"Batch size ({self.hparams.batch_size}) is not divisible by the number of devices ({self.trainer.world_size})."
                 )
-            self.batch_size_per_device = self.hparams.batch_size // self.trainer.world_size
+            self.batch_size_per_device = (
+                self.hparams.batch_size // self.trainer.world_size
+            )
 
         # load and split datasets only if not loaded already
         if not self.data_train and not self.data_val and not self.data_test:
             self.dataset = CCTVDataset(
                 data_dir=self.hparams.data_dir,
-                transforms=self.transforms,
             )
 
             self.data_train, self.data_val, self.data_test = random_split(
@@ -106,14 +110,14 @@ class CCTVDataModule(LightningDataModule):
 
         :return: The train dataloader.
         """
-        return self._create_dataloader(self.data_train, self.batch_size_per_device, shuffle=True)
+        return self._create_dataloader(self.data_train, self.batch_size_per_device)
 
     def val_dataloader(self) -> DataLoader[Any]:
         """Create and return the validation dataloader.
 
         :return: The validation dataloader.
         """
-        return self._create_dataloader(self.data_val, self.batch_size_per_device, shuffle=False)
+        return self._create_dataloader(self.data_val, self.batch_size_per_device)
 
     def test_dataloader(self) -> DataLoader[Any]:
         """Create and return the test dataloader.
@@ -121,10 +125,9 @@ class CCTVDataModule(LightningDataModule):
         :return: The test dataloader.
         """
 
-        return self._create_dataloader(self.data_test, 1, shuffle=False)
+        return self._create_dataloader(self.data_test, 1)
 
-    def _create_dataloader(self, dataset: Dataset, batch_size: int,
-                           shuffle: bool) -> DataLoader[Any]:
+    def _create_dataloader(self, dataset: Dataset, batch_size: int) -> DataLoader[Any]:
         """Create and return a dataloader.
 
         :param dataset: The dataset to create a dataloader for.
@@ -136,21 +139,25 @@ class CCTVDataModule(LightningDataModule):
             batch_size=batch_size,
             num_workers=self.hparams.num_workers,
             pin_memory=self.hparams.pin_memory,
-            shuffle=shuffle,
+            shuffle=False,
             collate_fn=self._collate_fn,
         )
 
-    def _collate_fn(self, batch: List[Tuple[torch.Tensor, Dict[str, Any]]]) -> Tuple[torch.Tensor, Dict[str, Any]]:
+    def _collate_fn(
+        self, batch: List[Tuple[torch.Tensor, Dict[str, Any]]]
+    ) -> Tuple[torch.Tensor, List[dict]]:
         """Collate a batch of data.
 
         :param batch: The batch to collate.
         :return: The collated batch.
         """
-        
+
         if self.for_detr:
             from models.detr.util.misc import nested_tensor_from_tensor_list
 
-            batch = list(zip(*batch))
-            batch[0] = nested_tensor_from_tensor_list(batch[0])
+            images = [x['image'] for x in batch]
+            targets = [{ k: v for k, v in t.items() if k != 'image'} for t in batch]
 
-            return tuple(batch)
+            images = nested_tensor_from_tensor_list(images)
+
+            return images, targets
