@@ -62,7 +62,7 @@ class DETRModule(LightningModule):
     def on_train_epoch_end(self) -> None:
         metrics = self.train_mAP.compute()
 
-        self.log("train/mAP", metrics['map'], on_epoch=True, prog_bar=True)
+        self.log("train/mAP", metrics['map'], prog_bar=True)
         self.log("lr", self.optimizers().param_groups[0]['lr'])
 
     def on_validation_epoch_start(self) -> None:
@@ -70,7 +70,7 @@ class DETRModule(LightningModule):
         self.val_mAP.reset()
 
         metrics = self.val_mAP.compute()
-        self.log("val/mAP", metrics['map'], on_step=False, on_epoch=True, prog_bar=True)
+        self.log("val/mAP", metrics['map'], prog_bar=True)
 
     def model_step(
         self, batch: Tuple[torch.Tensor, List[dict]]
@@ -113,7 +113,7 @@ class DETRModule(LightningModule):
         self.train_loss(loss)
         self.train_mAP(preds, targets)
 
-        self.log("train/mean_loss", self.train_loss, prog_bar=True)
+        self.log("train/mean_loss", self.train_loss.compute(), prog_bar=True)
         self.log("train/loss", reduced_loss, prog_bar=True)
         self.log("train/class_error", reduced_losses["class_error"], prog_bar=True)
         self.log("train/loss_ce", reduced_losses["loss_ce"], prog_bar=True)
