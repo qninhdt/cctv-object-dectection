@@ -55,23 +55,6 @@ class DETRModule(LightningModule):
         """
         return self.model(x)
 
-    def on_train_epoch_start(self) -> None:
-        self.train_loss.reset()
-        self.train_mAP.reset()
-
-    def on_train_epoch_end(self) -> None:
-        metrics = self.train_mAP.compute()
-
-        self.log("train/mAP", metrics['map'], prog_bar=True)
-        self.log("lr", self.optimizers().param_groups[0]['lr'])
-
-    def on_validation_epoch_start(self) -> None:
-        self.val_loss.reset()
-        self.val_mAP.reset()
-
-        metrics = self.val_mAP.compute()
-        self.log("val/mAP", metrics['map'], prog_bar=True)
-
     def model_step(
         self, batch: Tuple[torch.Tensor, List[dict]]
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -145,11 +128,6 @@ class DETRModule(LightningModule):
 
         self.log("val/loss", self.val_loss, prog_bar=True)
 
-    def on_validation_epoch_end(self) -> None:
-        "Lightning hook that is called when a validation epoch ends."
-        # self.log("val/acc_best", self.val_acc_best.compute(),
-        #          sync_dist=True, prog_bar=True)
-
     def test_step(
         self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int
     ) -> None:
@@ -170,10 +148,6 @@ class DETRModule(LightningModule):
         self.log("test/loss", self.test_loss, on_epoch=True, prog_bar=True)
         self.log("test/mAP", metrics['map'], on_epoch=True, prog_bar=True)
 
-    def on_test_epoch_end(self) -> None:
-        """Lightning hook that is called when a test epoch ends."""
-        pass
-
     def setup(self, stage: str) -> None:
         """Lightning hook that is called at the beginning of fit (train + validate), validate,
         test, or predict.
@@ -186,6 +160,32 @@ class DETRModule(LightningModule):
         if self.hparams.compile and stage == "fit":
             self.net = torch.compile(self.net)
 
+    def on_train_epoch_start(self) -> None:
+        self.train_loss.reset()
+        self.train_mAP.reset()
+
+    def on_train_epoch_end(self) -> None:
+        metrics = self.train_mAP.compute()
+
+        self.log("train/mAP", metrics['map'], prog_bar=True, sync_dist=True)
+        self.log("lr", self.optimizers().param_groups[0]['lr'], sync_dist=True)
+
+    def on_validation_epoch_start(self) -> None:
+        self.val_loss.reset()
+        self.val_mAP.reset()
+
+    def on_validation_epoch_end(self) -> None:
+        metrics = self.val_mAP.compute()
+        self.log("val/mAP", metrics['map'], prog_bar=True, sync_dist=True)
+
+    def on_test_epoch_start(self) -> None:
+        self.test_loss.reset()
+        self.test_mAP.reset()
+
+    def on_test_epoch_end(self) -> None:
+        metrics = self.test_mAP.compute()
+        self.log("test/mAP", metrics['map'], prog_bar=True, sync_dist=True)
+
     def configure_optimizers(self) -> Dict[str, Any]:
         """Choose what optimizers and learning-rate schedulers to use in your optimization.
         Normally you'd need one. But in the case of GANs or similar you might have multiple.
@@ -195,11 +195,15 @@ class DETRModule(LightningModule):
 
         :return: A dict containing the configured optimizers and learning-rate schedulers to be used for training.
         """
-        # for name, param in self.model.named_parameters():
-        #     if "backbone" in name or "transformer" in name:
-        #         param.requires_grad_(False)
+        params = []
 
-        optimizer = self.hparams.optimizer(params=self.model.parameters())
+        for name, param in self.model.named_parameters():
+            if "backbone" in name:
+                params.append({"params": param, "lr": 0.00001})
+            else:
+                params.append({"params": param})
+
+        optimizer = self.hparams.optimizer(params=params)
         if self.hparams.scheduler is not None:
             scheduler = self.hparams.scheduler(optimizer=optimizer)
             return {
