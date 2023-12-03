@@ -38,8 +38,7 @@ class CCTVDataset(Dataset):
 
         w, h = orig_image.size
 
-        orig_image = torch.tensor(np.array(orig_image, dtype=np.uint8)).permute(2, 0, 1)
-        image = orig_image.clone()
+        image = torch.tensor(np.array(orig_image, dtype=np.uint8)).permute(2, 0, 1)
 
         boxes = [
             [bbox["x"], bbox["y"], bbox["width"], bbox["height"]]
@@ -57,7 +56,6 @@ class CCTVDataset(Dataset):
         sample = {
             "image": image,
             "image_id": image_id,
-            "orig_image": orig_image,
             "size": size,
             "boxes": boxes,
             "labels": labels,

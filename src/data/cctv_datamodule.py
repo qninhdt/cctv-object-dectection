@@ -155,7 +155,6 @@ class CCTVDataModule(LightningDataModule):
         if self.for_detr:
             from models.detr.util.misc import nested_tensor_from_tensor_list
 
-            keys = batch[0].keys() 
             images = [x['image'] for x in batch]
             targets = [{k: v for k, v in x.items() if k != 'image'} for x in batch]
 

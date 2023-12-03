@@ -55,12 +55,22 @@ class DETRModule(LightningModule):
         """
         return self.model(x)
 
-    def on_train_start(self) -> None:
-        """Lightning hook that is called when training begins."""
-        # by default lightning executes validation step sanity checks before training starts,
-        # so it's worth to make sure validation metrics don't store results from these checks
+    def on_train_epoch_start(self) -> None:
+        self.train_loss.reset()
+        self.train_mAP.reset()
+
+    def on_train_epoch_end(self) -> None:
+        metrics = self.train_mAP.compute()
+
+        self.log("train/mAP", metrics['map'], on_epoch=True, prog_bar=True)
+        self.log("lr", self.optimizers().param_groups[0]['lr'])
+
+    def on_validation_epoch_start(self) -> None:
         self.val_loss.reset()
         self.val_mAP.reset()
+
+        metrics = self.val_mAP.compute()
+        self.log("val/mAP", metrics['map'], on_step=False, on_epoch=True, prog_bar=True)
 
     def model_step(
         self, batch: Tuple[torch.Tensor, List[dict]]
@@ -99,22 +109,16 @@ class DETRModule(LightningModule):
         
         preds, targets, loss, reduced_loss, reduced_losses = self.model_step(batch)
 
-        # update and log metrics
+        # # update and log metrics
         self.train_loss(loss)
         self.train_mAP(preds, targets)
 
-        metrics = self.train_mAP.compute()
-
-        self.log("train/mean_loss", self.train_loss.compute(), prog_bar=True)
+        self.log("train/mean_loss", self.train_loss, prog_bar=True)
         self.log("train/loss", reduced_loss, prog_bar=True)
         self.log("train/class_error", reduced_losses["class_error"], prog_bar=True)
         self.log("train/loss_ce", reduced_losses["loss_ce"], prog_bar=True)
         self.log("train/loss_bbox", reduced_losses["loss_bbox"], prog_bar=True)
         self.log("train/loss_giou", reduced_losses["loss_giou"], prog_bar=True)
-
-        self.log("train/mAP", metrics['map'], prog_bar=True)
-        
-        self.log("lr", self.optimizers().param_groups[0]['lr'])
 
         return loss
     
@@ -139,10 +143,7 @@ class DETRModule(LightningModule):
         self.val_loss(reduced_loss)
         self.val_mAP(preds, targets)
 
-        metrics = self.val_mAP.compute()
-
-        self.log("val/loss", self.val_loss, on_step=False, on_epoch=True, prog_bar=True)
-        self.log("val/mAP", metrics['map'], on_step=False, on_epoch=True, prog_bar=True)
+        self.log("val/loss", self.val_loss, prog_bar=True)
 
     def on_validation_epoch_end(self) -> None:
         "Lightning hook that is called when a validation epoch ends."
@@ -194,7 +195,11 @@ class DETRModule(LightningModule):
 
         :return: A dict containing the configured optimizers and learning-rate schedulers to be used for training.
         """
-        optimizer = self.hparams.optimizer(params=self.trainer.model.parameters())
+        # for name, param in self.model.named_parameters():
+        #     if "backbone" in name or "transformer" in name:
+        #         param.requires_grad_(False)
+
+        optimizer = self.hparams.optimizer(params=self.model.parameters())
         if self.hparams.scheduler is not None:
             scheduler = self.hparams.scheduler(optimizer=optimizer)
             return {
