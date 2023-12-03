@@ -5,6 +5,7 @@ import json
 
 import torch
 import numpy as np
+from random import Random
 from torchvision.transforms import v2 as T
 from torchvision import tv_tensors
 from torch.utils.data import Dataset
@@ -14,7 +15,7 @@ from PIL.Image import Image, open as open_image
 class CCTVDataset(Dataset):
     def __init__(self, data_dir: str) -> None:
         super().__init__()
-
+        
         self.data_dir = Path(data_dir)
 
         self.annotations: List[dict] = json.load(
@@ -22,6 +23,7 @@ class CCTVDataset(Dataset):
         )
 
         self.images: List[dict] = self.annotations["images"]
+        Random(1).shuffle(self.images)
 
         self.categorys = self.annotations["categories"]
 
