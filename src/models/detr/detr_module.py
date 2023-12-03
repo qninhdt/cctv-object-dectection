@@ -119,7 +119,7 @@ class DETRModule(LightningModule):
         return loss
     
     def postprocess(self, preds: torch.Tensor, targets: dict) -> None:
-        target_sizes = torch.tensor([[720, 720] for t in targets])
+        target_sizes = torch.tensor([[720, 720] for t in targets], device=self.device)
         preds = self.postprocessor(preds, target_sizes)
 
         return preds
