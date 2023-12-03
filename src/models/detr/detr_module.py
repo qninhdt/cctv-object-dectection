@@ -104,9 +104,9 @@ class DETRModule(LightningModule):
     
         if batch_idx == self.trainer.num_training_batches - 1:
             metrics = self.train_mAP.compute()
-            self.log("train/mAP", metrics["map"].to("cpu"), prog_bar=True, sync_dist=True)
-            self.log("train/mAP_50", metrics["map_50"].to("cpu"), prog_bar=True, sync_dist=True)
-            self.log("train/mAP_75", metrics["map_75"].to("cpu"), prog_bar=True, sync_dist=True)
+            self.log("train/mAP", metrics["map"].to(self.device), prog_bar=True, sync_dist=True)
+            self.log("train/mAP_50", metrics["map_50"].to(self.device), prog_bar=True, sync_dist=True)
+            self.log("train/mAP_75", metrics["map_75"].to(self.device), prog_bar=True, sync_dist=True)
 
         return loss
     

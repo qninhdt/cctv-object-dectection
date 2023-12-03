@@ -8,7 +8,7 @@ defaults:
   - model: detr
   - callbacks: default
   - logger: wandb
-  - trainer: cpu
+  - trainer: gpu
   - paths: default
   - extras: default
   - hydra: default
