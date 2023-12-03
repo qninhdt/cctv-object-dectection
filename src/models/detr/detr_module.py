@@ -167,8 +167,8 @@ class DETRModule(LightningModule):
         metrics = self.train_mAP.compute()
 
         self.log("train/mAP", metrics['map'], prog_bar=True, sync_dist=True)
-        self.log("train/mAP50", metrics['map50'], prog_bar=True, sync_dist=True)
-        self.log("train/mAP75", metrics['map75'], prog_bar=True, sync_dist=True)
+        # self.log("train/mAP50", metrics['map50'], prog_bar=True, sync_dist=True)
+        # self.log("train/mAP75", metrics['map75'], prog_bar=True, sync_dist=True)
         self.log("lr", self.optimizers().param_groups[0]['lr'], sync_dist=True)
 
     def on_validation_epoch_start(self) -> None:
@@ -183,8 +183,8 @@ class DETRModule(LightningModule):
 
         metrics = self.val_mAP.compute()
         self.log("val/mAP", metrics['map'], prog_bar=True, sync_dist=True)
-        self.log("val/mAP50", metrics['map50'], prog_bar=True, sync_dist=True)
-        self.log("val/mAP75", metrics['map75'], prog_bar=True, sync_dist=True)
+        # self.log("val/mAP50", metrics['map50'], prog_bar=True, sync_dist=True)
+        # self.log("val/mAP75", metrics['map75'], prog_bar=True, sync_dist=True)
 
     def on_test_epoch_start(self) -> None:
         self.test_loss.reset()
@@ -193,8 +193,8 @@ class DETRModule(LightningModule):
     def on_test_epoch_end(self) -> None:
         metrics = self.test_mAP.compute()
         self.log("test/mAP", metrics['map'], prog_bar=True, sync_dist=True)
-        self.log("test/mAP50", metrics['map50'], prog_bar=True, sync_dist=True)
-        self.log("test/mAP75", metrics['map75'], prog_bar=True, sync_dist=True)
+        # self.log("test/mAP50", metrics['map50'], prog_bar=True, sync_dist=True)
+        # self.log("test/mAP75", metrics['map75'], prog_bar=True, sync_dist=True)
 
     def configure_optimizers(self) -> Dict[str, Any]:
         """Choose what optimizers and learning-rate schedulers to use in your optimization.
