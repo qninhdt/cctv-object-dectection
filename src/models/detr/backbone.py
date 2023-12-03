@@ -76,6 +76,7 @@ class BackboneBase(nn.Module):
         super().__init__()
 
         self.body = IntermediateLayerGetter(backbone, return_layers={"layer4": "0"})
+
         self.num_channels = num_channels
 
     def forward(self, tensor_list: NestedTensor):

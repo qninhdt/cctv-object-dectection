@@ -2,13 +2,15 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import hydra
 import lightning as L
-import rootutils
+import os
+import sys
 from pathlib import Path
 from lightning import Callback, LightningDataModule, LightningModule, Trainer
 from lightning.pytorch.loggers import Logger
 from omegaconf import DictConfig
 
-rootutils.set_root(Path(__file__).parent)
+sys.path.append(str(Path(__file__).parent))
+os.environ['PROJECT_ROOT'] = str(Path(__file__).parent.parent)
 
 from utils import (
     RankedLogger,

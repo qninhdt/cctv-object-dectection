@@ -5,7 +5,7 @@ import torch
 from lightning import LightningDataModule
 from torch.utils.data import DataLoader, Dataset, random_split
 from torchvision.transforms import v2 as T
-from utils.transform import SquarePad
+from utils.transform import SquarePad, Normalize
 from utils.dataset import ApplyTransform
 
 from .cctv_dataset import CCTVDataset
@@ -39,7 +39,7 @@ class CCTVDataModule(LightningDataModule):
         self.for_detr = for_detr
 
         # data transformations
-        normalize = T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        normalize = Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 
         self.train_transforms = T.Compose(
             [
@@ -125,7 +125,7 @@ class CCTVDataModule(LightningDataModule):
         :return: The test dataloader.
         """
 
-        return self._create_dataloader(self.data_test, 1)
+        return self._create_dataloader(self.data_test, self.batch_size_per_device)
 
     def _create_dataloader(self, dataset: Dataset, batch_size: int) -> DataLoader[Any]:
         """Create and return a dataloader.
@@ -155,8 +155,9 @@ class CCTVDataModule(LightningDataModule):
         if self.for_detr:
             from models.detr.util.misc import nested_tensor_from_tensor_list
 
+            keys = batch[0].keys() 
             images = [x['image'] for x in batch]
-            targets = [{ k: v for k, v in t.items() if k != 'image'} for t in batch]
+            targets = [{k: v for k, v in x.items() if k != 'image'} for x in batch]
 
             images = nested_tensor_from_tensor_list(images)
 

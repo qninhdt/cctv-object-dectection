@@ -43,10 +43,11 @@ class CCTVDataset(Dataset):
             [bbox["x"], bbox["y"], bbox["width"], bbox["height"]]
             for bbox in target["boxes"]
         ]
-        classes = [bbox["category_id"] for bbox in target["boxes"]]
+        labels = [bbox["category_id"] for bbox in target["boxes"]]
 
-        boxes = tv_tensors.BoundingBoxes(boxes, format="XYWH", canvas_size=(h, w))
-        classes = torch.as_tensor(classes, dtype=torch.int64)
+        boxes = tv_tensors.BoundingBoxes(torch.tensor(boxes, dtype=torch.float32),
+                                         format="CXCYWH", canvas_size=(h, w))
+        labels = torch.tensor(labels, dtype=torch.int64)
 
         size = torch.tensor([int(h), int(w)])
         image_id = torch.tensor([target["id"]])
@@ -57,7 +58,7 @@ class CCTVDataset(Dataset):
             "orig_image": orig_image,
             "size": size,
             "boxes": boxes,
-            "labels": classes,
+            "labels": labels,
         }
 
         return sample

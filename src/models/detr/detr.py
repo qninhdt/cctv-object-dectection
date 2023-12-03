@@ -45,7 +45,6 @@ class DETR(nn.Module):
     def forward(self, samples: NestedTensor):
         """The forward expects a NestedTensor, which consists of:
            - samples.tensor: batched images, of shape [batch_size x 3 x H x W]
-           - samples.mask: a binary mask of shape [batch_size x H x W], containing 1 on padded pixels
 
         It returns a dict with the following elements:
            - "pred_logits": the classification logits (including no-object) for all queries.
@@ -165,7 +164,7 @@ class SetCriterion(nn.Module):
         idx = self._get_src_permutation_idx(indices)
         src_boxes = outputs["pred_boxes"][idx]
         target_boxes = torch.cat(
-            [t["boxes"][i] for t, (_, i) in zip(targets, indices)], dim=0
+            [t["nboxes"][i] for t, (_, i) in zip(targets, indices)], dim=0
         )
 
         loss_bbox = F.l1_loss(src_boxes, target_boxes, reduction="none")
@@ -203,7 +202,6 @@ class SetCriterion(nn.Module):
             "labels": self.loss_labels,
             "cardinality": self.loss_cardinality,
             "boxes": self.loss_boxes,
-            "masks": self.loss_masks,
         }
         assert loss in loss_map, f"do you really want to compute {loss} loss?"
         return loss_map[loss](outputs, targets, indices, num_boxes, **kwargs)
@@ -239,9 +237,6 @@ class SetCriterion(nn.Module):
             for i, aux_outputs in enumerate(outputs["aux_outputs"]):
                 indices = self.matcher(aux_outputs, targets)
                 for loss in self.losses:
-                    if loss == "masks":
-                        # Intermediate masks losses are too costly to compute, we ignore them.
-                        continue
                     kwargs = {}
                     if loss == "labels":
                         # Logging is enabled only for the last layer
@@ -275,8 +270,8 @@ class PostProcess(nn.Module):
         prob = F.softmax(out_logits, -1)
         scores, labels = prob[..., :-1].max(-1)
 
-        # convert to [x0, y0, x1, y1] format
-        boxes = box_ops.box_cxcywh_to_xyxy(out_bbox)
+        boxes = out_bbox
+
         # and from relative [0, 1] to absolute [0, height] coordinates
         img_h, img_w = target_sizes.unbind(1)
         scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1)
@@ -348,6 +343,6 @@ def build_detr(
         losses=losses,
     )
 
-    postprocessors = {"bbox": PostProcess()}
+    postprocessor = PostProcess()
 
-    return model, criterion, postprocessors
+    return model, criterion, postprocessor

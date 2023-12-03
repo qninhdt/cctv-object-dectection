@@ -7,6 +7,7 @@ from torchmetrics.detection.mean_ap import MeanAveragePrecision
 from torchmetrics import MaxMetric, MeanMetric
 
 from .detr import DETR, SetCriterion, PostProcess
+from .util.misc import reduce_dict
 
 from utils import RankedLogger
 
@@ -33,7 +34,8 @@ class DETRModule(LightningModule):
         # also ensures init params will be stored in ckpt
         self.save_hyperparameters(logger=False)
 
-        self.model, self.criterion, self.postprocessors = net
+        self.model, self.criterion, self.postprocessor = net
+        self.backbone = self.model.backbone
 
         # metric objects for calculating mAP across batches
         self.train_mAP = MeanAveragePrecision("cxcywh", "bbox", [0.5, 0.75])
@@ -73,26 +75,55 @@ class DETRModule(LightningModule):
             - A tensor of target labels.
         """
 
-        return None
+        samples, targets = batch
+        preds = self.forward(samples)
+        losses = self.criterion(preds, targets)
+
+        weight_dict = self.criterion.weight_dict
+
+        loss = sum(losses[k] * weight_dict[k] for k in losses.keys() if k in weight_dict)
+
+        reduced_losses = reduce_dict(losses)
+        reduced_scaled_losses = {k: v * weight_dict[k]
+                                    for k, v in reduced_losses.items() if k in weight_dict}
+        
+        reduced_loss = sum(reduced_scaled_losses.values())
+
+        preds = self.postprocess(preds, targets)
+
+        return preds, targets, loss, reduced_loss, reduced_losses
 
     def training_step(
         self, batch: Tuple[torch.Tensor, List[dict]], batch_idx: int
     ) -> torch.Tensor:
-        # loss, preds, targets = self.model_step(batch)
-        loss = torch.randn(1).to(self.device)
+        
+        preds, targets, loss, reduced_loss, reduced_losses = self.model_step(batch)
 
         # update and log metrics
         self.train_loss(loss)
-        # self.train_acc(preds, targets)
-        self.log(
-            "train/loss", self.train_loss, on_step=True, on_epoch=True, prog_bar=True
-        )
-        # self.log("train/acc", self.train_acc, on_step=False,
-        #          on_epoch=True, prog_bar=True)
+        self.train_mAP(preds, targets)
 
-        # return loss or backpropagation will fail
-        return torch.nn.Parameter(torch.tensor(0.0))
+        metrics = self.train_mAP.compute()
 
+        self.log("train/mean_loss", self.train_loss.compute(), prog_bar=True)
+        self.log("train/loss", reduced_loss, prog_bar=True)
+        self.log("train/class_error", reduced_losses["class_error"], prog_bar=True)
+        self.log("train/loss_ce", reduced_losses["loss_ce"], prog_bar=True)
+        self.log("train/loss_bbox", reduced_losses["loss_bbox"], prog_bar=True)
+        self.log("train/loss_giou", reduced_losses["loss_giou"], prog_bar=True)
+
+        self.log("train/mAP", metrics['map'], prog_bar=True)
+        
+        self.log("lr", self.optimizers().param_groups[0]['lr'])
+
+        return loss
+    
+    def postprocess(self, preds: torch.Tensor, targets: dict) -> None:
+        target_sizes = torch.tensor([[720, 720] for t in targets])
+        preds = self.postprocessor(preds, target_sizes)
+
+        return preds
+    
     def validation_step(
         self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int
     ) -> None:
@@ -102,15 +133,16 @@ class DETRModule(LightningModule):
             labels.
         :param batch_idx: The index of the current batch.
         """
-        # loss, preds, targets = self.model_step(batch)
+        preds, targets, _, reduced_loss, _ = self.model_step(batch)
 
         # # update and log metrics
-        # self.val_loss(loss)
-        # self.val_acc(preds, targets)
-        # self.log("val/loss", self.val_loss, on_step=False,
-        #          on_epoch=True, prog_bar=True)
-        # self.log("val/acc", self.val_acc, on_step=False,
-        #          on_epoch=True, prog_bar=True)
+        self.val_loss(reduced_loss)
+        self.val_mAP(preds, targets)
+
+        metrics = self.val_mAP.compute()
+
+        self.log("val/loss", self.val_loss, on_step=False, on_epoch=True, prog_bar=True)
+        self.log("val/mAP", metrics['map'], on_step=False, on_epoch=True, prog_bar=True)
 
     def on_validation_epoch_end(self) -> None:
         "Lightning hook that is called when a validation epoch ends."
@@ -126,15 +158,16 @@ class DETRModule(LightningModule):
             labels.
         :param batch_idx: The index of the current batch.
         """
-        # loss, preds, targets = self.model_step(batch)
+        preds, targets, _, reduced_loss, _ = self.model_step(batch)
 
         # update and log metrics
-        # self.test_loss(loss)
-        # self.test_acc(preds, targets)
-        # self.log("test/loss", self.test_loss, on_step=False,
-        #          on_epoch=True, prog_bar=True)
-        # self.log("test/acc", self.test_acc, on_step=False,
-        #          on_epoch=True, prog_bar=True)
+        self.test_loss(reduced_loss)
+        self.test_mAP(preds, targets)
+
+        metrics = self.test_mAP.compute()
+
+        self.log("test/loss", self.test_loss, on_epoch=True, prog_bar=True)
+        self.log("test/mAP", metrics['map'], on_epoch=True, prog_bar=True)
 
     def on_test_epoch_end(self) -> None:
         """Lightning hook that is called when a test epoch ends."""

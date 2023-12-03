@@ -7,8 +7,8 @@ defaults:
   - data: unclean_cctv
   - model: detr
   - callbacks: default
-  - logger: csv # set logger here or use command line (e.g. `python train.py logger=tensorboard`)
-  - trainer: gpu
+  - logger: wandb
+  - trainer: cpu
   - paths: default
   - extras: default
   - hydra: default
@@ -45,4 +45,4 @@ test: True
 # simply provide checkpoint path to resume training
 ckpt_path: null
 # seed for random number generators in pytorch, numpy and python.random
-seed: 23
+seed: 1
