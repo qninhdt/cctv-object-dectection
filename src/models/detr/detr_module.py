@@ -138,10 +138,10 @@ class DETRModule(LightningModule):
         if batch_idx == self.trainer.num_val_batches[0] - 1:
             metrics = self.val_mAP.compute()
             metrics = {k: v.to(self.device) for k, v in metrics.items()}
-            
-            self.log("val/mAP", metrics["map"].to("cpu"), prog_bar=True, sync_dist=True)
-            self.log("val/mAP_50", metrics["map_50"].to("cpu"), prog_bar=True, sync_dist=True)
-            self.log("val/mAP_75", metrics["map_75"].to("cpu"), prog_bar=True, sync_dist=True)
+
+            self.log("val/mAP", metrics["map"], prog_bar=True, sync_dist=True)
+            self.log("val/mAP_50", metrics["map_50"], prog_bar=True, sync_dist=True)
+            self.log("val/mAP_75", metrics["map_75"], prog_bar=True, sync_dist=True)
         
     def test_step(
         self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int
@@ -162,6 +162,8 @@ class DETRModule(LightningModule):
 
         if batch_idx == self.trainer.num_test_batches[0] - 1:
             metrics = self.test_mAP.compute()
+            metrics = {k: v.to(self.device) for k, v in metrics.items()}
+
             self.log("test/mAP", metrics["map"], on_epoch=True, prog_bar=True, sync_dist=True)
             self.log("test/mAP_50", metrics["map_50"], on_epoch=True, prog_bar=True, sync_dist=True)
             self.log("test/mAP_75", metrics["map_75"], on_epoch=True, prog_bar=True, sync_dist=True)
