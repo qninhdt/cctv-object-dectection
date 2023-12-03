@@ -5,10 +5,10 @@ default_root_dir: ${paths.output_dir}
 min_epochs: 1 # prevents early stopping
 max_epochs: 100
 
-accelerator: cpu
+accelerator: gpu
 devices: 1
 
-# fast_dev_run: 5
+fast_dev_run: false
 
 num_sanity_val_steps: 0
 

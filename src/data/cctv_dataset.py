@@ -55,8 +55,8 @@ class CCTVDataset(Dataset):
 
         sample = {
             "image": image,
-            "image_id": image_id,
-            "size": size,
+            # "image_id": image_id,
+            # "size": size,
             "boxes": boxes,
             "labels": labels,
         }

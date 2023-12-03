@@ -7,6 +7,7 @@ from torch.utils.data import DataLoader, Dataset, random_split
 from torchvision.transforms import v2 as T
 from utils.transform import SquarePad, Normalize
 from utils.dataset import ApplyTransform
+from models.detr.util.misc import nested_tensor_from_tensor_list
 
 from .cctv_dataset import CCTVDataset
 
@@ -144,20 +145,17 @@ class CCTVDataModule(LightningDataModule):
         )
 
     def _collate_fn(
-        self, batch: List[Tuple[torch.Tensor, Dict[str, Any]]]
+        self, batch: List[Dict[str, Any]]
     ) -> Tuple[torch.Tensor, List[dict]]:
         """Collate a batch of data.
 
         :param batch: The batch to collate.
         :return: The collated batch.
         """
+        images = [x['image'] for x in batch]
+        targets = [{k: v for k, v in x.items() if k != 'image'} for x in batch]
 
         if self.for_detr:
-            from models.detr.util.misc import nested_tensor_from_tensor_list
-
-            images = [x['image'] for x in batch]
-            targets = [{k: v for k, v in x.items() if k != 'image'} for x in batch]
-
             images = nested_tensor_from_tensor_list(images)
 
-            return images, targets
+        return images, targets
