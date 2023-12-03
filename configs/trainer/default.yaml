@@ -8,7 +8,9 @@ max_epochs: 100
 accelerator: cpu
 devices: 1
 
-# fast_dev_run: 200
+# fast_dev_run: 5
+
+num_sanity_val_steps: 0
 
 log_every_n_steps: 1
 

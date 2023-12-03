@@ -13,6 +13,20 @@ from utils import RankedLogger
 
 log = RankedLogger(__name__, rank_zero_only=True)
 
+class CustomMAP(MeanAveragePrecision):
+    def __init__(self, prefix, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.prefix = prefix
+    
+    def items(self):
+        metrics = self.compute()
+        metric_dict = {
+            self.prefix + "/" + "mAP": metrics["map"],
+            self.prefix + "/" + "mAP_50": metrics["map_50"],
+            self.prefix + "/" + "mAP_75": metrics["map_75"],
+        }
+
+        return metric_dict.items()
 
 class DETRModule(LightningModule):
     def __init__(
@@ -38,16 +52,14 @@ class DETRModule(LightningModule):
         self.backbone = self.model.backbone
 
         # metric objects for calculating mAP across batches
-        self.train_mAP = MeanAveragePrecision("cxcywh", "bbox", [0.5, 0.75])
-        self.val_mAP = MeanAveragePrecision("cxcywh", "bbox", [0.5, 0.75])
-        self.test_mAP = MeanAveragePrecision("cxcywh", "bbox", [0.5, 0.75])
+        self.train_mAP = CustomMAP("train", "cxcywh", "bbox", [0.5, 0.75])
+        self.val_mAP = CustomMAP("val", "cxcywh", "bbox", [0.5, 0.75])
+        self.test_mAP = CustomMAP("test", "cxcywh", "bbox", [0.5, 0.75])
 
         # for averaging loss across batches
         self.train_loss = MeanMetric()
         self.val_loss = MeanMetric()
         self.test_loss = MeanMetric()
-
-        self.shit = False
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Perform a forward pass through the model `self.net`.
@@ -105,6 +117,8 @@ class DETRModule(LightningModule):
         self.log("train/loss_bbox", reduced_losses["loss_bbox"], prog_bar=True)
         self.log("train/loss_giou", reduced_losses["loss_giou"], prog_bar=True)
 
+        self.log_dict(self.train_mAP, on_epoch=True, on_step=False, prog_bar=True)
+
         return loss
     
     def postprocess(self, preds: torch.Tensor, targets: dict) -> None:
@@ -130,6 +144,8 @@ class DETRModule(LightningModule):
 
         self.log("val/loss", self.val_loss, prog_bar=True)
 
+        self.log_dict(self.val_mAP, on_epoch=True, on_step=False, prog_bar=True)
+
     def test_step(
         self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int
     ) -> None:
@@ -147,6 +163,8 @@ class DETRModule(LightningModule):
 
         self.log("test/loss", self.test_loss, on_epoch=True, prog_bar=True)
 
+        self.log_dict(self.test_mAP, on_epoch=True, on_step=False, prog_bar=True)
+
     def setup(self, stage: str) -> None:
         """Lightning hook that is called at the beginning of fit (train + validate), validate,
         test, or predict.
@@ -163,38 +181,13 @@ class DETRModule(LightningModule):
         self.train_loss.reset()
         self.train_mAP.reset()
 
-    def on_train_epoch_end(self) -> None:
-        metrics = self.train_mAP.compute()
-
-        self.log("train/mAP", metrics['map'], prog_bar=True, sync_dist=True)
-        # self.log("train/mAP50", metrics['map50'], prog_bar=True, sync_dist=True)
-        # self.log("train/mAP75", metrics['map75'], prog_bar=True, sync_dist=True)
-        self.log("lr", self.optimizers().param_groups[0]['lr'], sync_dist=True)
-
     def on_validation_epoch_start(self) -> None:
         self.val_loss.reset()
         self.val_mAP.reset()
 
-    def on_validation_epoch_end(self) -> None:
-        if not self.shit:
-            self.shit = True
-            print("shit")
-            return
-
-        metrics = self.val_mAP.compute()
-        self.log("val/mAP", metrics['map'], prog_bar=True, sync_dist=True)
-        # self.log("val/mAP50", metrics['map50'], prog_bar=True, sync_dist=True)
-        # self.log("val/mAP75", metrics['map75'], prog_bar=True, sync_dist=True)
-
     def on_test_epoch_start(self) -> None:
         self.test_loss.reset()
         self.test_mAP.reset()
-
-    def on_test_epoch_end(self) -> None:
-        metrics = self.test_mAP.compute()
-        self.log("test/mAP", metrics['map'], prog_bar=True, sync_dist=True)
-        # self.log("test/mAP50", metrics['map50'], prog_bar=True, sync_dist=True)
-        # self.log("test/mAP75", metrics['map75'], prog_bar=True, sync_dist=True)
 
     def configure_optimizers(self) -> Dict[str, Any]:
         """Choose what optimizers and learning-rate schedulers to use in your optimization.

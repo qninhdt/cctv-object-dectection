@@ -1,5 +1,4 @@
 from typing import Any, Dict, List, Tuple
-
 import hydra
 import rootutils
 from lightning import LightningDataModule, LightningModule, Trainer
