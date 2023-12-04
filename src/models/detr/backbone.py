@@ -114,7 +114,7 @@ class Joiner(nn.Sequential):
         return out, pos
 
 
-def build_backbone(hidden_dim, position_encoding_type,):
+def build_backbone(hidden_dim, position_encoding_type):
     position_embedding = build_position_encoding(hidden_dim, position_encoding_type)
     backbone = Backbone()
     model = Joiner(backbone, position_embedding)

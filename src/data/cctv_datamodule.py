@@ -46,7 +46,8 @@ class CCTVDataModule(LightningDataModule):
             [
                 SquarePad(),
                 T.RandomHorizontalFlip(p=0.5),
-                T.RandomResizedCrop(IMAGE_SIZE, (0.2, 1), (1, 1), antialias=True),
+                # T.RandomResizedCrop(IMAGE_SIZE, (0.2, 1), (1, 1), antialias=True),
+                T.Resize(IMAGE_SIZE, antialias=True),
                 T.ToDtype(torch.float32, scale=True),
                 normalize,
             ]

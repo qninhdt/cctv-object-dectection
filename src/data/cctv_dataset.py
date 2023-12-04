@@ -59,6 +59,7 @@ class CCTVDataset(Dataset):
             # "size": size,
             "boxes": boxes,
             "labels": labels,
+            "type": target["type"]
         }
 
         return sample
