@@ -201,15 +201,15 @@ class DETRModule(LightningModule):
 
         :return: A dict containing the configured optimizers and learning-rate schedulers to be used for training.
         """
-        for name, param in self.model.named_parameters():
-            # if "backbone" in name:
-            #     params.append({"params": param, "lr": 0.00001})
-            # else:
-            #     params.append({"params": param})
-            if "backbone" in name:
-                param.requires_grad_(False)
+        params = []
 
-        optimizer = self.hparams.optimizer(params=self.model.parameters())
+        for name, param in self.model.named_parameters():
+            if "backbone" in name:
+                params.append({"params": param, "lr": 0.00001})
+            else:
+                params.append({"params": param})
+
+        optimizer = self.hparams.optimizer(params=params)
         if self.hparams.scheduler is not None:
             scheduler = self.hparams.scheduler(optimizer=optimizer)
             return {
