@@ -66,7 +66,7 @@ class HungarianMatcher(nn.Module):
 
         # Also concat the target labels and boxes
         tgt_ids = torch.cat([v["labels"] for v in targets])
-        tgt_bbox = torch.cat([v["nboxes"] for v in targets])
+        tgt_bbox = torch.cat([v["boxes"] for v in targets])
 
         # Compute the classification cost. Contrary to the loss, we don't use the NLL,
         # but approximate it in 1 - proba[target class].
@@ -89,7 +89,7 @@ class HungarianMatcher(nn.Module):
         )
         C = C.view(bs, num_queries, -1).cpu()
 
-        sizes = [len(v["nboxes"]) for v in targets]
+        sizes = [len(v["boxes"]) for v in targets]
         indices = [
             linear_sum_assignment(c[i]) for i, c in enumerate(C.split(sizes, -1))
         ]

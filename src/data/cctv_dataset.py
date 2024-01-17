@@ -9,17 +9,18 @@ from random import Random
 from torchvision.transforms import v2 as T
 from torchvision import tv_tensors
 from torch.utils.data import Dataset
-from PIL.Image import Image, open as open_image
+import cv2
 
 
 class CCTVDataset(Dataset):
-    def __init__(self, data_dir: str) -> None:
+    def __init__(self, unclean_data_dir: str, clean_data_dir: str):
         super().__init__()
-        
-        self.data_dir = Path(data_dir)
+
+        self.unclean_data_dir = Path(unclean_data_dir)
+        self.clean_data_dir = Path(clean_data_dir)
 
         self.annotations: List[dict] = json.load(
-            open(self.data_dir / "annotations.json")
+            open(self.unclean_data_dir / "annotations.json")
         )
 
         self.images: List[dict] = self.annotations["images"]
@@ -31,14 +32,15 @@ class CCTVDataset(Dataset):
         # copy annotation of image
         target: dict = self.images[idx].copy()
 
-        # load image
-        orig_image: Image = open_image(
-            self.data_dir / "images" / target["filename"]
-        ).convert("RGB")
+        # load unimage
+        unclean_image = cv2.imread(
+            str(self.unclean_data_dir / "images" / target["filename"])
+        )
 
-        w, h = orig_image.size
-
-        image = torch.tensor(np.array(orig_image, dtype=np.uint8)).permute(2, 0, 1)
+        # load clean image
+        clean_image = cv2.imread(
+            str(self.clean_data_dir / "images" / target["filename"])
+        )
 
         boxes = [
             [bbox["x"], bbox["y"], bbox["width"], bbox["height"]]
@@ -46,20 +48,21 @@ class CCTVDataset(Dataset):
         ]
         labels = [bbox["category_id"] for bbox in target["boxes"]]
 
-        boxes = tv_tensors.BoundingBoxes(torch.tensor(boxes, dtype=torch.float32),
-                                         format="CXCYWH", canvas_size=(h, w))
+        boxes = torch.tensor(boxes, dtype=torch.float32)
+        # cxcywh -> xywh
+        boxes[:, 0] = boxes[:, 0] - boxes[:, 2] / 2
+        boxes[:, 1] = boxes[:, 1] - boxes[:, 3] / 2
+
+        boxes = torch.abs(boxes)
+
         labels = torch.tensor(labels, dtype=torch.int64)
 
-        size = torch.tensor([int(h), int(w)])
-        image_id = torch.tensor([target["id"]])
-
         sample = {
-            "image": image,
-            # "image_id": image_id,
-            # "size": size,
+            "clean_image": clean_image,
+            "image": unclean_image,
             "boxes": boxes,
             "labels": labels,
-            "type": target["type"]
+            "type": target["type"],
         }
 
         return sample

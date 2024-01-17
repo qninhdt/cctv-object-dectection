@@ -27,7 +27,7 @@ test-full: ## Run all tests
 	pytest
 
 train: ## Train the model
-	python src/train.py
+	python src/train.py trainer.fast_dev_run=True
 
 eval:
-	python src/eval.py
+	python src/eval.py data.batch_size=1 ckpt_path="./checkpoints/abc.ckpt"

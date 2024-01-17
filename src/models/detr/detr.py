@@ -16,6 +16,9 @@ from .util.misc import (
 )
 
 
+from models.unet.unet import UNet
+
+
 class DETR(nn.Module):
     """This is the DETR module that performs object detection"""
 
@@ -39,6 +42,8 @@ class DETR(nn.Module):
         self.query_embed = nn.Embedding(num_queries, hidden_dim)
         self.input_proj = nn.Conv2d(backbone.num_channels, hidden_dim, kernel_size=1)
         self.backbone = backbone
+
+        self.unet = UNet(self.backbone.backbone)
         self.aux_loss = aux_loss
 
     def forward(self, samples: NestedTensor):
@@ -71,7 +76,10 @@ class DETR(nn.Module):
 
         if self.aux_loss:
             out["aux_outputs"] = self._set_aux_loss(outputs_class, outputs_coord)
-        return out
+
+        restored_images = self.unet(samples.tensors)
+
+        return out, restored_images
 
     @torch.jit.unused
     def _set_aux_loss(self, outputs_class, outputs_coord):
@@ -164,7 +172,7 @@ class SetCriterion(nn.Module):
         idx = self._get_src_permutation_idx(indices)
         src_boxes = outputs["pred_boxes"][idx]
         target_boxes = torch.cat(
-            [t["nboxes"][i] for t, (_, i) in zip(targets, indices)], dim=0
+            [t["boxes"][i] for t, (_, i) in zip(targets, indices)], dim=0
         )
 
         loss_bbox = F.l1_loss(src_boxes, target_boxes, reduction="none")

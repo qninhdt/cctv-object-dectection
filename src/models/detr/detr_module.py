@@ -4,6 +4,7 @@ import torch
 from lightning import LightningModule
 
 from torchmetrics.detection.mean_ap import MeanAveragePrecision
+from torchmetrics import PeakSignalNoiseRatio
 from torchmetrics import MaxMetric, MeanMetric
 
 from .detr import DETR, SetCriterion, PostProcess
@@ -12,6 +13,7 @@ from .util.misc import reduce_dict
 from utils import RankedLogger
 
 log = RankedLogger(__name__, rank_zero_only=True)
+
 
 class DETRModule(LightningModule):
     def __init__(
@@ -36,10 +38,16 @@ class DETRModule(LightningModule):
         self.model, self.criterion, self.postprocessor = net
         self.backbone = self.model.backbone
 
+        iou_thresholds = [0.5, 0.75]
+
         # metric objects for calculating mAP across batches
-        self.train_mAP = MeanAveragePrecision("cxcywh", "bbox", [0.5, 0.75])
-        self.val_mAP = MeanAveragePrecision("cxcywh", "bbox", [0.5, 0.75])
-        self.test_mAP = MeanAveragePrecision("cxcywh", "bbox", [0.5, 0.75])
+        self.train_mAP = MeanAveragePrecision("cxcywh", "bbox", iou_thresholds)
+        self.val_mAP = MeanAveragePrecision("cxcywh", "bbox", iou_thresholds)
+        self.test_mAP = MeanAveragePrecision("cxcywh", "bbox", iou_thresholds)
+
+        self.train_pnsr = PeakSignalNoiseRatio()
+        self.val_pnsr = PeakSignalNoiseRatio()
+        self.test_pnsr = PeakSignalNoiseRatio()
 
         # for averaging loss across batches
         self.train_loss = MeanMetric()
@@ -67,33 +75,54 @@ class DETRModule(LightningModule):
             - A tensor of target labels.
         """
 
-        samples, targets = batch
-        preds = self.forward(samples)
+        images, clean_images, targets = batch
+        preds, restored_images = self.forward(images)
         losses = self.criterion(preds, targets)
 
         weight_dict = self.criterion.weight_dict
 
-        loss = sum(losses[k] * weight_dict[k] for k in losses.keys() if k in weight_dict)
+        loss = sum(
+            losses[k] * weight_dict[k] for k in losses.keys() if k in weight_dict
+        )
 
         reduced_losses = reduce_dict(losses)
-        reduced_scaled_losses = {k: v * weight_dict[k]
-                                    for k, v in reduced_losses.items() if k in weight_dict}
-        
+        reduced_scaled_losses = {
+            k: v * weight_dict[k] for k, v in reduced_losses.items() if k in weight_dict
+        }
+
         reduced_loss = sum(reduced_scaled_losses.values())
+
+        unet_loss = 100 * torch.nn.functional.mse_loss(restored_images, clean_images)
+
+        reduced_losses["unet_loss"] = unet_loss
 
         preds = self.postprocess(preds, targets)
 
-        return preds, targets, loss, reduced_loss, reduced_losses
+        return (
+            preds,
+            targets,
+            loss + unet_loss,
+            reduced_loss,
+            reduced_losses,
+            restored_images,
+        )
 
     def training_step(
         self, batch: Tuple[torch.Tensor, List[dict]], batch_idx: int
     ) -> torch.Tensor:
-        
-        preds, targets, loss, reduced_loss, reduced_losses = self.model_step(batch)
+        (
+            preds,
+            targets,
+            loss,
+            reduced_loss,
+            reduced_losses,
+            restored_images,
+        ) = self.model_step(batch)
 
         # # update and log metrics
         self.train_loss(loss)
         self.train_mAP(preds, targets)
+        self.train_pnsr(restored_images, batch[1])
 
         self.log("train/mean_loss", self.train_loss.compute(), prog_bar=True)
         self.log("train/loss", reduced_loss, prog_bar=True)
@@ -101,7 +130,8 @@ class DETRModule(LightningModule):
         self.log("train/loss_ce", reduced_losses["loss_ce"], prog_bar=True)
         self.log("train/loss_bbox", reduced_losses["loss_bbox"], prog_bar=True)
         self.log("train/loss_giou", reduced_losses["loss_giou"], prog_bar=True)
-    
+        self.log("train/loss_unet", reduced_losses["unet_loss"], prog_bar=True)
+
         if batch_idx == self.trainer.num_training_batches - 1:
             metrics = self.train_mAP.compute()
             metrics = {k: v.to(self.device) for k, v in metrics.items()}
@@ -109,40 +139,45 @@ class DETRModule(LightningModule):
             self.log("train/mAP", metrics["map"], prog_bar=True, sync_dist=True)
             self.log("train/mAP_50", metrics["map_50"], prog_bar=True, sync_dist=True)
             self.log("train/mAP_75", metrics["map_75"], prog_bar=True, sync_dist=True)
+            self.log(
+                "train/pnsr", self.train_pnsr.compute(), prog_bar=True, sync_dist=True
+            )
+
+            self.train_mAP.reset()
+            self.train_pnsr.reset()
 
         return loss
-    
+
     def postprocess(self, preds: torch.Tensor, targets: dict) -> None:
         target_sizes = torch.tensor([[720, 720] for t in targets], device=self.device)
         preds = self.postprocessor(preds, target_sizes)
 
         return preds
-    
+
     def validation_step(
         self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int
     ) -> None:
-        """Perform a single validation step on a batch of data from the validation set.
-
-        :param batch: A batch of data (a tuple) containing the input tensor of images and target
-            labels.
-        :param batch_idx: The index of the current batch.
-        """
-        preds, targets, _, reduced_loss, _ = self.model_step(batch)
+        preds, targets, loss, _, _, restored_images = self.model_step(batch)
 
         # # update and log metrics
-        self.val_loss(reduced_loss)
+        self.val_loss(loss)
         self.val_mAP(preds, targets)
-
-        self.log("val/loss", self.val_loss, prog_bar=True)
+        self.val_pnsr(restored_images, batch[1])
 
         if batch_idx == self.trainer.num_val_batches[0] - 1:
             metrics = self.val_mAP.compute()
             metrics = {k: v.to(self.device) for k, v in metrics.items()}
 
+            self.log("val/loss", self.val_loss.compute(), prog_bar=True)
+
             self.log("val/mAP", metrics["map"], prog_bar=True, sync_dist=True)
             self.log("val/mAP_50", metrics["map_50"], prog_bar=True, sync_dist=True)
             self.log("val/mAP_75", metrics["map_75"], prog_bar=True, sync_dist=True)
-        
+            self.log("val/pnsr", self.val_pnsr.compute(), prog_bar=True, sync_dist=True)
+
+            self.val_mAP.reset()
+            self.val_pnsr.reset()
+
     def test_step(
         self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int
     ) -> None:
@@ -152,21 +187,43 @@ class DETRModule(LightningModule):
             labels.
         :param batch_idx: The index of the current batch.
         """
-        preds, targets, _, reduced_loss, _ = self.model_step(batch)
+        preds, targets, loss, _, _, restored_images = self.model_step(batch)
 
         # update and log metrics
-        self.test_loss(reduced_loss)
+        self.test_loss(loss)
         self.test_mAP(preds, targets)
-
-        self.log("test/loss", self.test_loss, on_epoch=True, prog_bar=True)
+        self.test_pnsr(restored_images, batch[1])
 
         if batch_idx == self.trainer.num_test_batches[0] - 1:
             metrics = self.test_mAP.compute()
             metrics = {k: v.to(self.device) for k, v in metrics.items()}
 
-            self.log("test/mAP", metrics["map"], on_epoch=True, prog_bar=True, sync_dist=True)
-            self.log("test/mAP_50", metrics["map_50"], on_epoch=True, prog_bar=True, sync_dist=True)
-            self.log("test/mAP_75", metrics["map_75"], on_epoch=True, prog_bar=True, sync_dist=True)
+            self.log("test/loss", self.test_loss.compute(), prog_bar=True)
+
+            self.log(
+                "test/mAP", metrics["map"], on_epoch=True, prog_bar=True, sync_dist=True
+            )
+            self.log(
+                "test/mAP_50",
+                metrics["map_50"],
+                on_epoch=True,
+                prog_bar=True,
+                sync_dist=True,
+            )
+            self.log(
+                "test/mAP_75",
+                metrics["map_75"],
+                on_epoch=True,
+                prog_bar=True,
+                sync_dist=True,
+            )
+
+            self.log(
+                "test/pnsr", self.test_pnsr.compute(), prog_bar=True, sync_dist=True
+            )
+
+            self.test_mAP.reset()
+            self.test_pnsr.reset()
 
     def setup(self, stage: str) -> None:
         """Lightning hook that is called at the beginning of fit (train + validate), validate,

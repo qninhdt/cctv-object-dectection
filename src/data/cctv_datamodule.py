@@ -5,9 +5,10 @@ import torch
 from lightning import LightningDataModule
 from torch.utils.data import DataLoader, Dataset, random_split
 from torchvision.transforms import v2 as T
-from utils.transform import SquarePad, Normalize
 from utils.dataset import ApplyTransform
 from models.detr.util.misc import nested_tensor_from_tensor_list
+import albumentations as A
+from albumentations.pytorch import ToTensorV2
 
 from .cctv_dataset import CCTVDataset
 
@@ -17,7 +18,8 @@ IMAGE_SIZE = 720
 class CCTVDataModule(LightningDataModule):
     def __init__(
         self,
-        data_dir: str,
+        clean_data_dir: str,
+        unclean_data_dir: str,
         train_val_test_split: Tuple[int, int, int],
         batch_size: int,
         num_workers: int,
@@ -40,26 +42,47 @@ class CCTVDataModule(LightningDataModule):
         self.for_detr = for_detr
 
         # data transformations
-        normalize = Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-
-        self.train_transforms = T.Compose(
+        self.train_transforms = A.Compose(
             [
-                SquarePad(),
-                T.RandomHorizontalFlip(p=0.5),
-                # T.RandomResizedCrop(IMAGE_SIZE, (0.2, 1), (1, 1), antialias=True),
-                T.Resize(IMAGE_SIZE, antialias=True),
-                T.ToDtype(torch.float32, scale=True),
-                normalize,
-            ]
+                A.HorizontalFlip(p=0.5),
+                A.LongestMaxSize(max_size=IMAGE_SIZE, interpolation=1),
+                A.PadIfNeeded(
+                    min_height=IMAGE_SIZE,
+                    min_width=IMAGE_SIZE,
+                    border_mode=0,
+                    value=(0, 0, 0),
+                ),
+                # A.RandomResizedCrop(
+                #     IMAGE_SIZE,
+                #     IMAGE_SIZE,
+                #     scale=(0.2, 1),
+                #     ratio=(1, 1),
+                # ),
+                A.Normalize(),
+                ToTensorV2(),
+            ],
+            additional_targets={
+                "clean_image": "image",
+            },
+            bbox_params=A.BboxParams(format="coco", label_fields=["labels"]),
         )
 
-        self.transforms = T.Compose(
+        self.transforms = A.Compose(
             [
-                SquarePad(),
-                T.Resize(IMAGE_SIZE, antialias=True),
-                T.ToDtype(torch.float32, scale=True),
-                normalize,
-            ]
+                A.LongestMaxSize(max_size=IMAGE_SIZE, interpolation=1),
+                A.PadIfNeeded(
+                    min_height=IMAGE_SIZE,
+                    min_width=IMAGE_SIZE,
+                    border_mode=0,
+                    value=(0, 0, 0),
+                ),
+                A.Normalize(),
+                ToTensorV2(),
+            ],
+            additional_targets={
+                "clean_image": "image",
+            },
+            bbox_params=A.BboxParams(format="coco", label_fields=["labels"]),
         )
 
         self.dataset: Optional[CCTVDataset] = None
@@ -94,7 +117,8 @@ class CCTVDataModule(LightningDataModule):
         # load and split datasets only if not loaded already
         if not self.data_train and not self.data_val and not self.data_test:
             self.dataset = CCTVDataset(
-                data_dir=self.hparams.data_dir,
+                clean_data_dir=self.hparams.clean_data_dir,
+                unclean_data_dir=self.hparams.unclean_data_dir,
             )
 
             self.data_train, self.data_val, self.data_test = random_split(
@@ -153,10 +177,16 @@ class CCTVDataModule(LightningDataModule):
         :param batch: The batch to collate.
         :return: The collated batch.
         """
-        images = [x['image'] for x in batch]
-        targets = [{k: v for k, v in x.items() if k != 'image'} for x in batch]
+        images = [x["image"] for x in batch]
+        clean_images = [x["clean_image"] for x in batch]
+        targets = [
+            {k: v for k, v in x.items() if k != "image" and k != "clean_image"}
+            for x in batch
+        ]
+
+        clean_images = torch.stack(clean_images, dim=0)
 
         if self.for_detr:
             images = nested_tensor_from_tensor_list(images)
 
-        return images, targets
+        return images, clean_images, targets
